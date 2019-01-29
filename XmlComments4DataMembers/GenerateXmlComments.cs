@@ -109,14 +109,20 @@ namespace XmlComments4DataMembers
             int addedLines = 0;
             for (int i = 0; i < inputLines.Length; i++)
             {
+                // Check if summary exists already
+                if (i > 0 && inputLines[i - 1].Contains("</summary>")) continue;
                 // Check if line contains datamember
-                string dataMemberName = Implementation.GetDataMember(inputLines[i]);
-                if (dataMemberName == null) continue;
+                string xmlContent = Implementation.GetDataMember(inputLines[i]);
+                // check if line contains DataContract
+                if (xmlContent == null && inputLines[i].Contains("DataContract"))
+                {
+                    xmlContent = Implementation.FindClassName(inputLines, i + 1);
+                }
 
-                if (i > 0 && inputLines[i - 1].Contains("</summary>")) continue;  //summary already exists
+                if (xmlContent == null) continue;
 
                 int identation = Implementation.GetIdentationSpaces(inputLines[i]);
-                string[] xmlComment = Implementation.GetXmlComment(dataMemberName, identation);
+                string[] xmlComment = Implementation.GetXmlComment(xmlContent, identation);
                 textLines.AddLines(i + addedLines, xmlComment);
                 addedLines += xmlComment.Length;
             }
