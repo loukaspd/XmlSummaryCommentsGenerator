@@ -1,15 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel.Design;
-using System.Globalization;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
-using EnvDTE;
 using Microsoft.VisualStudio.Shell;
-using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.TextManager.Interop;
 using Task = System.Threading.Tasks.Task;
 
@@ -20,6 +11,9 @@ namespace XmlComments4DataMembers
     /// </summary>
     internal sealed class GenerateXmlComments
     {
+
+        #region VsExtension Methods
+
         /// <summary>
         /// Command ID.
         /// </summary>
@@ -85,6 +79,9 @@ namespace XmlComments4DataMembers
             Instance = new GenerateXmlComments(package, commandService);
         }
 
+        #endregion VsExtension Methods
+
+
         /// <summary>
         /// This function is the callback used to execute the command when the menu item is clicked.
         /// See the constructor to see how the menu item is associated with this function using
@@ -100,32 +97,7 @@ namespace XmlComments4DataMembers
             if (textLines == null) return;
             string[] inputLines = textLines.GetAllLines();
 
-            AddXmlSummary(textLines, inputLines);
-        }
-
-
-        private void AddXmlSummary(IVsTextLines textLines, string[] inputLines)
-        {
-            int addedLines = 0;
-            for (int i = 0; i < inputLines.Length; i++)
-            {
-                // Check if summary exists already
-                if (i > 0 && inputLines[i - 1].Contains("</summary>")) continue;
-                // Check if line contains datamember
-                string xmlContent = Implementation.GetDataMember(inputLines[i]);
-                // check if line contains DataContract
-                if (xmlContent == null && inputLines[i].Contains("DataContract"))
-                {
-                    xmlContent = Implementation.FindClassName(inputLines, i + 1);
-                }
-
-                if (xmlContent == null) continue;
-
-                int identation = Implementation.GetIdentationSpaces(inputLines[i]);
-                string[] xmlComment = Implementation.GetXmlComment(xmlContent, identation);
-                textLines.AddLines(i + addedLines, xmlComment);
-                addedLines += xmlComment.Length;
-            }
+            Implementation.ProcessCurrentFile(textLines, inputLines);
         }
     }
 }

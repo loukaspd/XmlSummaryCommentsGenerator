@@ -1,11 +1,44 @@
-﻿using System.Linq;
+﻿using Microsoft.VisualStudio.TextManager.Interop;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace XmlComments4DataMembers
 {
     public class Implementation
     {
-        public static string GetDataMember(string lineInput)
+        /// <summary>
+        /// Main Method, processes input current file content
+        /// </summary>
+        /// <param name="textLines"></param>
+        /// <param name="inputLines">The content of the </param>
+        public static void ProcessCurrentFile(IVsTextLines textLines, string[] inputLines)
+        {
+            int addedLines = 0;
+            for (int i = 0; i < inputLines.Length; i++)
+            {
+                // Check if summary exists already
+                if (i > 0 && inputLines[i - 1].Contains("</summary>")) continue;
+                // Check if line contains datamember
+                string xmlContent = Implementation.GetDataMember(inputLines[i]);
+                // check if line contains DataContract
+                if (xmlContent == null && inputLines[i].Contains("DataContract"))
+                {
+                    xmlContent = Implementation.FindClassName(inputLines, i + 1);
+                }
+
+                if (xmlContent == null) continue;
+
+                int identation = Implementation.GetIdentationSpaces(inputLines[i]);
+                string[] xmlComment = Implementation.GetXmlComment(xmlContent, identation);
+                textLines.AddLines(i + addedLines, xmlComment);
+                addedLines += xmlComment.Length;
+            }
+        }
+
+
+        #region Private Implementation
+
+        private static string GetDataMember(string lineInput)
         {
             var regex = new Regex("DataMember.*Name\\s*=\\s*\"(.*)\"");
             Match match = regex.Match(lineInput);
@@ -23,7 +56,7 @@ namespace XmlComments4DataMembers
         /// <param name="input">File input lines</param>
         /// <param name="startIndex">line index where [DataContract] lives</param>
         /// <returns>Class name in camel case</returns>
-        public static string FindClassName(string[] input, int startIndex)
+        private static string FindClassName(string[] input, int startIndex)
         {
             while (startIndex < input.Length)
             {
@@ -37,7 +70,7 @@ namespace XmlComments4DataMembers
         }
 
 
-        public static int GetIdentationSpaces(string lineInput)
+        private static int GetIdentationSpaces(string lineInput)
         {
             int result = 0;
             while (result < lineInput.Length && lineInput[result] == ' ') result++;
@@ -46,7 +79,7 @@ namespace XmlComments4DataMembers
         }
 
 
-        public static string[] GetXmlComment(string content, int spaces)
+        private static string[] GetXmlComment(string content, int spaces)
         {
             string identation = new string(Enumerable.Repeat(' ', spaces).ToArray());
             return new[]
@@ -75,5 +108,7 @@ namespace XmlComments4DataMembers
 
             return SplitCamelCase(dataMember);
         }
+
+        #endregion Private Implementation
     }
 }
