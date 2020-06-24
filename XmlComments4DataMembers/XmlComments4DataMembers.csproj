@@ -54,6 +54,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Auxiliaries\HelperMethods.cs" />
     <Compile Include="GenerateXmlComments.cs" />
     <Compile Include="GenerateXmlCommentsPackage.cs" />
     <Compile Include="Implementation.cs" />

@@ -1,6 +1,5 @@
 ﻿using Microsoft.VisualStudio.TextManager.Interop;
-using System.Linq;
-using System.Text.RegularExpressions;
+using System.Collections.Generic;
 
 namespace XmlComments4DataMembers
 {
@@ -16,97 +15,100 @@ namespace XmlComments4DataMembers
             int addedLines = 0;
             for (int i = 0; i < inputLines.Length; i++)
             {
-                // Check if summary exists already
-                if (i > 0 && inputLines[i - 1].Contains("</summary>")) continue;
-                // Check if line contains datamember
-                string xmlContent = Implementation.GetDataMember(inputLines[i]);
-                // check if line contains DataContract
-                if (xmlContent == null && inputLines[i].Contains("DataContract"))
+                // Check property
+                string propertyName = LineContainsPropertyWithoutDataMember(inputLines, i);
+                if (propertyName != null)
                 {
-                    xmlContent = Implementation.FindClassName(inputLines, i + 1);
+                    int identation = inputLines[i].GetLineIdentation();
+                    string dataMemberLine = GenerateDataMember(propertyName, identation);
+                    List<string> xmlComments = GetXmlComment(propertyName, identation);
+
+                    xmlComments.Add(dataMemberLine);
+
+                    textLines.AddLines(i + addedLines, xmlComments.ToArray());
+                    addedLines += xmlComments.Count;
+                    continue;
                 }
 
-                if (xmlContent == null) continue;
 
-                int identation = Implementation.GetIdentationSpaces(inputLines[i]);
-                string[] xmlComment = Implementation.GetXmlComment(xmlContent, identation);
-                textLines.AddLines(i + addedLines, xmlComment);
-                addedLines += xmlComment.Length;
+                string dataMember = LineContainsDataMemberWithoutSummary(inputLines, i);
+                if (dataMember != null)
+                {
+                    int identation = inputLines[i].GetLineIdentation();
+                    List<string> xmlComments = GetXmlComment(dataMember, identation);
+
+                    textLines.AddLines(i + addedLines, xmlComments.ToArray());
+                    addedLines += xmlComments.Count;
+                    continue;
+                }
             }
         }
 
 
         #region Private Implementation
 
-        private static string GetDataMember(string lineInput)
+        /// <summary>
+        /// Checks if line at <paramref name="index"/> contains Property and [DataMember] does not exist in prev lines
+        /// </summary>
+        /// <param name="inputLines">input with all lines</param>
+        /// <param name="index">The line of the index</param>
+        /// <returns>The name of the property of null, if no [DataMember] is needed</returns>
+        private static string LineContainsPropertyWithoutDataMember(string[] inputLines, int index)
         {
-            var regex = new Regex("DataMember.*Name\\s*=\\s*\"(.*)\"");
-            Match match = regex.Match(lineInput);
-            if (!match.Success) return null;
+            string lineContent = inputLines[index];
+            string propertyName = HelperMethods.ExtractProperty(lineContent);
+            if (propertyName == null) return null;
 
-            string dataMember = match.Groups[1].Value;
+            string prevLine = HelperMethods.GetPrevLineWithContent(inputLines, index);
+            if (prevLine == null) return propertyName;
 
-            return SplitCamelCase(dataMember);
+            if (HelperMethods.ExtractDataMember(prevLine) != null) return null; //already contains DataMember
+            return propertyName;
         }
 
 
         /// <summary>
-        /// Search until you find class declaration (There might be spaces between [DataContract] and actual class declaration
+        /// Checks if line at <paramref name="index"/> contains [DataMember] and no <summary> exists in prev lines
         /// </summary>
-        /// <param name="input">File input lines</param>
-        /// <param name="startIndex">line index where [DataContract] lives</param>
-        /// <returns>Class name in camel case</returns>
-        private static string FindClassName(string[] input, int startIndex)
+        /// <param name="inputLines">input with all lines</param>
+        /// <param name="index">The line of the index</param>
+        /// <returns>The name of the property of null, if no [DataMember] is needed</returns>
+        private static string LineContainsDataMemberWithoutSummary(string[] inputLines, int index)
         {
-            while (startIndex < input.Length)
-            {
-                string className = GetClassName(input[startIndex]);
-                if (className != null) return className;
+            string lineContent = inputLines[index];
+            string dataMember = HelperMethods.ExtractDataMember(lineContent);
+            if (dataMember == null) return null;
 
-                startIndex++;
-            }
+            string prevLine = HelperMethods.GetPrevLineWithContent(inputLines, index);
+            if (prevLine == null) return dataMember;
 
-            return null;
+            if (HelperMethods.LineIsSummaryEnd(prevLine)) return null;  //already contains Summary
+
+            return dataMember;
         }
 
 
-        private static int GetIdentationSpaces(string lineInput)
+        /// <summary>
+        /// Generate DataMember for the specified property
+        /// </summary>
+        /// <param name="propertyName"></param>
+        /// <returns></returns>
+        private static string GenerateDataMember(string propertyName, int identation)
         {
-            int result = 0;
-            while (result < lineInput.Length && lineInput[result] == ' ') result++;
-
-            return result;
+            return $"[DataMember(Name = \"{propertyName.CamelCase()}\")]".AddIdentetion(identation);
         }
 
 
-        private static string[] GetXmlComment(string content, int spaces)
+        private static List<string> GetXmlComment(string dataMemberName, int spaces)
         {
-            string identation = new string(Enumerable.Repeat(' ', spaces).ToArray());
-            return new[]
+            string description = HelperMethods.SplitCamelCase(dataMemberName);
+
+            return new List<string>
             {
-                $"{identation}/// <summary>",
-                $"{identation}/// {content}",
-                $"{identation}/// </summary>"
+                "/// <summary>".AddIdentetion(spaces),
+                $"/// {description}".AddIdentetion(spaces),
+                "/// </summary>".AddIdentetion(spaces)
             };
-        }
-
-        private static string SplitCamelCase(string camelCaseInput)
-        {
-            char[] result = Regex.Replace(camelCaseInput, "([A-Z])", " $1", RegexOptions.Compiled).Trim().ToCharArray();
-            result[0] = char.ToUpper(result[0]);
-
-            return new string(result);
-        }
-
-        private static string GetClassName(string lineInput)
-        {
-            var regex = new Regex(".*public\\s*class\\s*(.*)\\s*");
-            Match match = regex.Match(lineInput);
-            if (!match.Success) return null;
-
-            string dataMember = match.Groups[1].Value;
-
-            return SplitCamelCase(dataMember);
         }
 
         #endregion Private Implementation
